@@ -66,25 +66,71 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
      * An array that keeps track of query locations in the query history
      * @var array 
      */
-    private $ex = Array();
+    protected $ex = Array();
 
     /**
      * Table engine list array
      * @var array 
      */
-    private $tbEngines = Array(); //EACH TABLE GETS IT'S OWN DB ENGINE
+    protected $tbEngines = Array(); //EACH TABLE GETS IT'S OWN DB ENGINE
     
     /**
      * Table registration array
      * @var array 
      */
-    private $registerArray = Array(); //TABLE REGISTRATION ARRAY
+    protected $registerArray = Array(); //TABLE REGISTRATION ARRAY
     
     /**
-     * Table details array
+     * Table details array. This array is populated from a cache file and is 
+     * required for table registration.
      * @var array 
      */
-    private $dbTables = Array(); //DATABASE TABLE STRUCTURE ARRAY
+    protected $dbTables = Array(); //DATABASE TABLE STRUCTURE ARRAY
+    
+    /**
+     * Flag to automatically create the table structure cache file.  If on, 
+     * the table structure cache file will be created at the registered interval
+     * @var bool 
+     */
+    protected $autoCreateStructure = true;
+    
+    /**
+     * The number of hours until the table structure cache file is automatcially 
+     * recreated.  The time is based on the file timestamp.
+     * @var int 
+     */
+    protected $autoCreateIntervalHours = 1;
+    
+    /**
+     * The filename for the table structure cache file
+     * @var stirng 
+     */
+    protected $tableStructureCacheFile = "ipm.class.db.tables.cfg";
+    
+    /**
+     * The filename for the table registration information
+     * @var string 
+     */
+    protected $registrationFile = "ipm.class.db.registration.cfg";
+    
+    /**
+     * Registration database configration array, used when the file does not exist. 
+     * Will always attempt to load the database when the file is missing or 
+     * <i>$regUsing</i> is set to database.
+     * @var array 
+     */
+    protected $regDbConfig = Array(
+        "value" => "value",
+        "table" => TABLE_CONFIG,
+        "id" => Array("field"=>"varname","value"=>"DB_REGISTRATION")
+    );
+    
+    /**
+     * Determines if the registration should use the <i>database</i> or <i>file</i>, 
+     * defaults to <i>file</i>.
+     * @var type 
+     */
+    protected $regUsing = "file";
 
     private function IS_SET($flag,$bit) { return $flag & $bit; } //BITWISE FUNCTION
     private function SET_BIT(&$var,$bit) { $var |= $bit; } //BITWISE FUNCTION
@@ -122,7 +168,7 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
      * @param string $engine Name of the engine
      * @param string $tablename Name of the table, used for creating a table constant
      */
-    private function createEngine($engine, $tablename = "") {
+    protected function createEngine($engine, $tablename = "") {
 //        if ($tablename == "") $tablename = $engine;
         if (!defined($engine)) define($engine,$this->getdb().".".$tablename); //CREATE CONSTANT FOR TABLE REGISTERED NAME
         $this->tbEngines[$engine] = new aIPM_db_engine($this->pluginType,$this->conn); //INTANTIATE DATABASE ENGINE
@@ -134,22 +180,23 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
     }
 
     /**
-     * Loads the table registration.  All tables are given a table engine 
-     * instance
+     * Creates the table structure cache file
+     * @return bool True if the file was created
      */
-    public function loadRegistration() { //LOAD TABLE REGISTRATION
+    public function createTableStructureCache() {
+        $dbTables = Array();
         $sQueryShowTables = "show tables"; //GET A LIST OF DATABASE TABLES
         $results = $this->query($sQueryShowTables); //EXECUTE DATABASE DATA CALL
         for ($x = 0; $x < count($results); $x++) //LOOP THROUGH RESULT ARRAY TO SET TABLE STRUCTURE ARRAY
-        foreach ($results[$x] as $db => $table) $this->dbTables[$table] = Array(); //SET TABLE STRUCTURE ARRAY WITH EMPTY ARRAYS
+        foreach ($results[$x] as $db => $table) $dbTables[$table] = Array("fields"=>Array(),"query"=>""); //SET TABLE STRUCTURE ARRAY WITH EMPTY ARRAYS
         unset($results); //FREE RESULTS VARIABLE FOR PROCESSING DIFFERENT RESULTS
 
-        foreach ($this->dbTables as $tablename => $v) { //LOOP THROUGH TABLE STRUCTURE ARRAY TO FILL IN DATA
+        foreach ($dbTables as $tablename => $v) { //LOOP THROUGH TABLE STRUCTURE ARRAY TO FILL IN DATA
             $sQueryExplain = "explain `".$tablename."`"; //GET TABLE STRUCTURE
             $results = $this->query($sQueryExplain); //EXECUTE DATABASE DATA CALL
             for ($x = 0; $x < count($results); $x++) { //LOOP THROUGH FIELDS TO FILL TABLE STRUCTURE ARRAY
                 $temp = explode("(",$results[$x]["Type"]); //SEPERATE FIELD TYPE FROM LENGTH
-                $this->dbTables[$tablename]["fields"][] = Array( //FILL FIELDS DATA IN STRUCTURE ARRAY
+                $dbTables[$tablename]["fields"][] = Array( //FILL FIELDS DATA IN STRUCTURE ARRAY
                     "name" => $results[$x]["Field"], //FIELD NAME
                     "key" => $results[$x]["Key"], //TYPE OF KEY FOR FIELD (PRIMARY/SECONDARY)
                     "type" => $temp[0], //FIELD TYPE (INT,VARCHAR,ECT)
@@ -161,32 +208,72 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
             } //END FOR
             $sQueryShowCreate = "show create table `".$tablename."`"; //GET TABLE CREATE SQL QUERY
             $results = $this->query($sQueryShowCreate); //EXECUTE DATABASE DATA CALL
-            $this->dbTables[$tablename]["query"] = $results[0]["Create Table"]; //SET CREATE SQL IN STRUCTURE ARRAY
+            $dbTables[$tablename]["query"] = $results[0]["Create Table"]; //SET CREATE SQL IN STRUCTURE ARRAY
         }
         
-        $sQueryConfig = "select * from ".TABLE_CONFIG." where varname='DB_REGISTRATION'"; //LOAD DATABASE REGISTRATION
-        $results = $this->query($sQueryConfig); //EXECUTE DATABASE DATA CALL
-        $this->registerArray = json_decode($results[0]["value"],true); //SET DATABASE REGISTRY
+        $structure = serialize($dbTables);
+        $structure = base64_encode($structure);
+        $written = file_put_contents(__dir__."/".$this->tableStructureCacheFile,$structure);
+        return ($written > 0);
+    }
+    
+    /**
+     * Loads the table structure cache into the dbTables array
+     */
+    protected function loadTableStructure() {
+        $createfile = false;
+        $path = __dir__;
+        if (file_exists($path."/".$this->tableStructureCacheFile)) {
+            $timestamp = time();
+            $interval = 60 * 60 * $this->autoCreateIntervalHours;
+            $filetime = filemtime($path."/".$this->tableStructureCacheFile);
+            if (($timestamp - $filetime) > $interval) $createfile = true;
+        } else $createfile = true;
+
+        if ($this->autoCreateStructure === true && $createfile === true)
+            $this->createTableStructureCache();
+        
+        if (file_exists($path."/".$this->tableStructureCacheFile)) {
+            $structure = file_get_contents($path."/".$this->tableStructureCacheFile);
+            $structure = base64_decode($structure);
+            $this->dbTables = unserialize($structure);
+        }
+        unset($structure);
+    }
+
+    /**
+     * Loads the table registration.  All tables are given a table engine 
+     * instance
+     */
+    public function loadRegistration() { //LOAD TABLE REGISTRATION
+        $path = __dir__;
+        if (file_exists($path."/".$this->registrationFile) && $this->regUsing == "file") $restration = file_get_contents($path."/".$this->registrationFile);
+        else {
+            $sQueryConfig = "select {$this->regDbConfig["value"]} as registration from {$this->regDbConfig["table"]} where {$this->regDbConfig["id"]["field"]}='{$this->regDbConfig["id"]["value"]}'"; //LOAD DATABASE REGISTRATION
+            $results = $this->query($sQueryConfig); //EXECUTE DATABASE DATA CALL
+            $restration = $results[0]["registration"];
+        }
+        $this->registerArray = json_decode($restration,true); //SET DATABASE REGISTRY
         foreach($this->registerArray as $table) { //LOOP THROUGH REGISTERED TABLES AND CREATE A DB ENGINE
             $engine = $table["varname"]; //INITIALIZE ENGINE NAME
             $this->createEngine($engine,$table["tablename"]);
         } //END FOREACH
         
-        foreach($this->dbTables as $table => $data) { //LOOP THROUGH TABLES TO DETERMINE IF A TABLE NEEDS TO BE REGISTERED
-            if (!$this->isRegistered($table)) { //REGISTER THE TABLE IF NOT REGISTERED
-                $tablename = $table; //TABLE NAME FROM STRUCTURE
-                $prefixFound = false; //INITIALIZED PREFIX FOUND BOOLEAN
-                foreach ($this->getDefaults("prefix") as $role => $prefix) { //LOOP THROUGH POSSIBLE PREFIXES TO DETERMINE IF TABLE IS USING ONE
-                    if (preg_match('/'.$prefix.'_/',$table)) { //CHECK IF A PREFIX IF PART OF THE TABLE NAME
-                        $engine = strtoupper(str_replace($prefix."_","table_",$table)); //REMOVE THE PREFIX AND ADD GENERIC PREFIX FOR REGISTERED NAME
-                        $prefixFound = true; //SET PREFIX FOUND
-                        break; //END LOOP
-                    } //END IF
-                } //END FOR
-                if (!$prefixFound) $engine = strtoupper("table_".$table); //IF NO PREFIX FOUND, ADD GENERIC PREFIX
-                $this->createEngine($engine,$tablename); //REGISTER THE TABLE
-            } //END IF
-        } //END FOREACH
+//        foreach($this->dbTables as $table => $data) { //LOOP THROUGH TABLES TO DETERMINE IF A TABLE NEEDS TO BE REGISTERED
+//            if (!$this->isRegistered($table)) { //REGISTER THE TABLE IF NOT REGISTERED
+//                $tablename = $table; //TABLE NAME FROM STRUCTURE
+//                $prefixFound = false; //INITIALIZED PREFIX FOUND BOOLEAN
+//                foreach ($this->getDefaults("prefix") as $role => $prefix) { //LOOP THROUGH POSSIBLE PREFIXES TO DETERMINE IF TABLE IS USING ONE
+//                    if (preg_match('/'.$prefix.'_/',$table)) { //CHECK IF A PREFIX IF PART OF THE TABLE NAME
+//                        $engine = strtoupper(str_replace($prefix."_","table_",$table)); //REMOVE THE PREFIX AND ADD GENERIC PREFIX FOR REGISTERED NAME
+//                        $prefixFound = true; //SET PREFIX FOUND
+//                        break; //END LOOP
+//                    } //END IF
+//                } //END FOR
+//                if (!$prefixFound) $engine = strtoupper("table_".$table); //IF NO PREFIX FOUND, ADD GENERIC PREFIX
+//                $this->createEngine($engine,$tablename); //REGISTER THE TABLE
+//            } //END IF
+//        } //END FOREACH
 //        echo 'IPM_db_engine, loadRegistration - $this->tbEngines: '.print_r($this->tbEngines,true)."<br>\r\n";
 
     } //END FUNCTION
@@ -201,7 +288,7 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
     public function register($engine,$table,$query = false) { //REGISTERING THE TABLE ALLOWS FOR CUSTOM NAMING OF THE DATABASE ENGINE AND CONSTANT
         if ($this->isRegistered($table) || $this->isRegistered($engine,"engine")) { //ONLY REGISTER AN UNREGISTERED TABLE
             foreach($this->registerArray as $index => $rtable) { //LOOP THROUGH THE LIST OF REGISTERED FUNCTIONS
-                if ($rtable["varname"] == $name || $rtable["tablename"] == $name) {
+                if ($rtable["varname"] == $engine || $rtable["tablename"] == $table) {
                     unset($this->registerArray[$index]);
                     break;
                 }
@@ -209,8 +296,12 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
         }
         $this->registerArray[] = Array("varname"=>$engine,"tablename"=>$table); //ADD THE NAME TO THE REGISTERED ARRAY
         
-        $uQueryRegister = "update ".TABLE_CONFIG." set value='".json_encode($this->registerArray)."' where varname='DB_REGISTRATION'"; //UPDATA REGISTRATION CONFIG VARIABLE
-        $this->query($uQueryRegister); //EXECUTE DATABASE DATA CALL
+        $path = __dir__;
+        if ($this->regUsing == "file") file_put_contents($path."/".$this->registrationFile,json_encode($this->registerArray));
+        else {
+            $uQueryRegister = "update {$this->regDbConfig["table"]} set {$this->regDbConfig["value"]}='".$this->real_escape_string(json_encode($this->registerArray))."' where {$this->regDbConfig["id"]["field"]}='{$this->regDbConfig["id"]["value"]}'"; //UPDATA REGISTRATION CONFIG VARIABLE
+            $this->query($uQueryRegister); //EXECUTE DATABASE DATA CALL
+        }
             
         if (!array_key_exists($engine, $this->tbEngines)) $this->createEngine($engine,$table);
     } //END FUNCTION
@@ -292,6 +383,7 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
     public function setdb($db) {
         if ($this->plugin->setdb($db)) {
             //$this->loadDefaults(); //ONCE THE DATABASE IS SET LOAD THE DATABASE DEFAULTS
+            $this->loadTableStructure();
             $this->loadRegistration(); //ONCE THE DATABASE IS SET LOAD THE TABLE REGISTRATION
             return true;
         }
@@ -334,15 +426,6 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
      * @legacy
      */
     public function resreset($pointer = 0) { return $this->plugin->reset($pointer = 0); } //RESET THE RESULT SET RETURNED BY LOCAL ENGINE
-
-    /**
-     * Escapes the variable to make it safe to use in a query
-     * @param String $var The variable to escape
-     * @return String The escaped string
-     */
-    public function real_escape_string($var) {
-        return mysql_real_escape_string($var);
-    }
 
     /**
      * Submits an SQL statement to the database and keeps a reference to the 

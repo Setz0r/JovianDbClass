@@ -179,6 +179,13 @@ class aIPM_db_engine {
      * @return Integer Insert ID
      */
     public function insert_id() { return $this->plugin->insert_id; }
+
+    /**
+     * Escapes the variable to make it safe to use in a query
+     * @param String $var The variable to escape
+     * @return String The escaped string
+     */
+    public function real_escape_string($var) { return $this->plugin->real_escape_string($var); }
     
     /**
      * Returns the last query executed

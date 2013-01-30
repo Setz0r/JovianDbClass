@@ -16,21 +16,182 @@
  * @package   IPM\Core\System\Database
  */
 interface iIPM_db_plugin {
+    /**
+     * Sets the default table creation values
+     * @param mixed Defaults object, could also be an array
+     */
     public function setDefaults($defaults);
+    
+    /**
+     * Returns the default table creatoin values as an object
+     * @params string $option (Optional) Returns the value for the specified option, 
+     * if empty will return all default values
+     * @return mixed Requested value or default value object
+     */
     public function getDefaults($varname = "");
+    
+    /**
+     * Opens/creates a connection to the database
+     * @param String $user User name
+     * @param String $pass Password
+     * @param String $host Server host name/IP
+     * @return Boolean True is connection created
+     */
     public function open($user,$pass,$host);
+
+    /**
+     * Sets the current database as active
+     * @param String $db Database name
+     * @return Boolean True on success
+     */
     public function setdb($db);
+    
+    /**
+     * Sets session variables for current database connection
+     * @param String $dbvar Session variable to set
+     * @param String $value Value to assign to the session variable
+     * @return Boolean True on success
+     */
     public function setvar($variable,$value);
+
+    /**
+     * Returns current connection status
+     * @return Boolean True if connected
+     */
     public function connected();
+
+    /**
+     * Closes the current database connection
+     */
     public function close();
+
+    /**
+     * Submits an SQL statement to the database
+     * @param String $query Query to execute
+     * @return mixed Array of the result set or the return of a passed callback
+     */ 
     public function query($query);
+
+    /**
+     * Returns the results of the last successfully executed SQL statement
+     * @param string $type (Optional) Type of results to return (array or resource), 
+     * defaults to array
+     * @return mixed MySQL result resource
+     */ 
     public function results($type = "array");
+
+    /**
+     * Returns the current result set for the last successfully run sql statement
+     * @param Integer $row Row to move the pointer to
+     * @param mixed $field (Optional) Field to get the data from, defaults to 0 or the first field
+     * @return mixed Contents of specified field or false on failure
+     * @todo Move the commented <i>result</i> function the mysqli plugin
+     */
     public function result($row,$field = 0);
+
+    /**
+     * Resets the pointer in the MySQL result set
+     * @param Integer $pointer (Optional) Position in the result set to reset to, defaults to 0
+     * @return mixed True on success, MySQL error number on failure
+     */
     public function reset($pointer = 0);
+
+    /**
+     * Escapes the variable to make it safe to use in a query
+     * @param String $var The variable to escape
+     * @return String The escaped string
+     */
+    public function real_escape_string($var);
+
+    /**
+     * Insert a record into the database by generating a safe query using provided
+     * parameter array
+     * @param array $params A configuration array containing the following 
+     * parameters:<ul>
+     * <li><b>table</b> The table to perform the query on</li>
+     * <li><b>fields</b> (Optional) An array of table fields/value pairs to update the record with, defaults to "*"</li>
+     * </ul>
+     * @param bool $returnQuery Set to True to return the compiled query without 
+     * executing it.
+     * @return mixed The ID of the insert statement if the table has an auto 
+     * incremeted field or the compiled query.
+     */
     public function insert($params,$returnQuery = false);
+
+    /**
+     * Update a record in the database by generating a safe query using provided
+     * parameter array
+     * @param array $params A configuration array containing the following 
+     * parameters:<ul>
+     * <li><b>table</b> The table to perform the query on</li>
+     * <li><b>fields</b> An array of table fields/value pairs to update the record with, defaults to "*"</li>
+     * <li><b>where</b> (Optional) An array of table fields/value pairs to use as the where clause</li>
+     * </ul>
+     * @param bool $returnQuery Set to True to return the compiled query without 
+     * executing it.
+     * @return mixed The amount of affected rows or the compiled query.
+     */
     public function update($params,$returnQuery = false);
+
+    /**
+     * Select records from the database by generating a safe query using provided
+     * parameter array
+     * @param array $params A configuration array containing the following 
+     * parameters:<ul>
+     * <li><b>table</b> The table to perform the query on</li>
+     * <li><b>fields</b> (Optional) An array of table fields/value pairs to update the record with, defaults to "*"</li>
+     * <li><b>where</b> (Optional) An array of table fields/value pairs to use as the where clause</li>
+     * <li><b>options</b> (Optional) An array with various options for the query.  As follows<ul>
+     * <li><b>order</b> The field to order by or an array containing the <u>fields</u> and <u>dir</u>ection to sort</li>
+     * <li><b>limit</b> The number of records to query or an array containing the <u>start</u> and <u>length</u></li>
+     * <li><b>group</b> The field to group by</li>
+     * </ul></li>
+     * </ul>
+     * @param bool $returnQuery Set to True to return the compiled query without 
+     * executing it.
+     * @return mixed The result array from the executed query or the compiled query
+     */
     public function select($params,$returnQuery = false);
+    
+    /**
+     * Delete a set of records from the database by generating a safe query using 
+     * provided parameter array
+     * @param array $params A configuration array containing the following 
+     * parameters:<ul>
+     * <li><b>table</b> The table to perform the query on</li>
+     * <li><b>where</b> An array of table fields/value pairs to use as the where clause</li>
+     * </ul>
+     * @param bool $returnQuery Set to True to return the compiled query without 
+     * executing it.
+     * @return mixed The amount of affected rows or the compiled query.
+     */
     public function delete($params,$returnQuery = false);
+
+    /**
+     * Create a table in the database by generating a safe query using provided
+     * parameter array
+     * @param array $params An array of table configuration to build the query.  
+     * The following are valid<ul>
+     * <li><b>role</b> The type of table or role the table in the table will have 
+     * (system, content, modules), used in the naming of the table</li>
+     * <li><b>primarykey</b> field to use as the primary key</li>
+     * <li><b>fields</b> An array of field descriptions, each index should be an 
+     * array withhave the following:<ul>
+     * <li><b>name</b> name of the field</li>
+     * <li><b>type</b> valid database field type</li>
+     * <li><b>length</b> the length of the field</li>
+     * <li><b>null</b> (bool) is null</li>
+     * <li><b>default</b> default value of the field</li>
+     * <li><b>charset</b> character set</li>
+     * <li><b>collate</b> collation</li>
+     * <li><b>auto</b> auto increment field</li>
+     * </ul>
+     * </li>
+     * </ul>
+     * @param bool $returnQuery Set to True to return the compiled query without 
+     * executing it.
+     * @return mixed 
+     */
     public function create($params,$returnQuery = false);
 }
 

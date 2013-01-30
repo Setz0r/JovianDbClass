@@ -245,6 +245,15 @@ class IPM_db_plugin_mysql extends aIPM_db_plugin implements iIPM_db_plugin {
     }
 
     /**
+     * Escapes the variable to make it safe to use in a query
+     * @param String $var The variable to escape
+     * @return String The escaped string
+     */
+    public function real_escape_string($var) {
+        return mysql_real_escape_string($var);
+    }
+
+    /**
      * Compiles an insert query for safe execution
      * @param string $tablename The table to perform the query on
      * @param array $vars An array of table fields/value pairs

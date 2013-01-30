@@ -56,12 +56,6 @@ class IPM_db_engine extends aIPM_db_engine {
     }
     
     /**
-     * Returns the name of the current active database
-     * @return String Database name, false if a database is not selected
-     */
-    public function getdb() { return $this->plugin->database; }
-    
-    /**
      * Sets session variables for current database connection
      * <p>Note: Not permitted on table engine instances</p>
      * @param String $dbvar Session variable to set
