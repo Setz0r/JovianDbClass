@@ -93,6 +93,17 @@
                         '},'+
                     
                         '{'+
+                            '"href":"files/ipm.class.db.plugin.sqlsrv.html",'+
+                            '"text":"IPM_db_plugin_sqlsrv",'+
+                            '"id":"IPM_db_plugin_sqlsrv",'+
+                            '"filename":"",'+
+                            '"isClass":true,'+
+                            '"iconCls":"icon-cls",'+
+                            '"cls":"cls",'+
+                            '"leaf":true'+
+                        '},'+
+                    
+                        '{'+
                             '"href":"files/ipm.class.db.engine.basic.html",'+
                             '"text":"aIPM_db_engine",'+
                             '"id":"aIPM_db_engine",'+

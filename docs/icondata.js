@@ -6,6 +6,8 @@
           
                 '"IPM_db_plugin_mysql":"icon-cls",'+
           
+                '"IPM_db_plugin_sqlsrv":"icon-cls",'+
+          
                 '"aIPM_db_engine":"icon-cls",'+
           
                 '"aIPM_db_plugin":"icon-cls",'+
