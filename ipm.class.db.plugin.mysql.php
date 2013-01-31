@@ -58,9 +58,10 @@ class IPM_db_plugin_mysql extends aIPM_db_plugin implements iIPM_db_plugin {
      * @param String $user User name
      * @param String $pass Password
      * @param String $host Server host name/IP
+     * @param String $database (Optional) Database
      * @return Boolean True is connection created
      */
-    public function open($user,$pass,$host) {
+    public function open($user,$pass,$host,$database = "") {
         if ($this->extensionLoaded === false) return false;
         
         $this->errno = 0;
@@ -74,6 +75,8 @@ class IPM_db_plugin_mysql extends aIPM_db_plugin implements iIPM_db_plugin {
         $this->server = $host;
         $this->username = $user;
         $this->password = $pass;
+        if ($database !== "") $this->setdb($database);
+        
         return true;
     }
 

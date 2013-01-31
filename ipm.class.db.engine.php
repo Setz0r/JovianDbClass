@@ -38,11 +38,13 @@ class IPM_db_engine extends aIPM_db_engine {
      * @param String $user User name
      * @param String $pass Password
      * @param String $host Server host name/IP
+     * @param String $database (Optional) Database
      * @return Boolean True is connection created
      */
-    public function open($user,$pass,$host) {
-        $this->plugin->open($user,$pass,$host);
+    public function open($user,$pass,$host,$database = "") {
+        $results = $this->plugin->open($user,$pass,$host,$database);
         $this->conn = $this->plugin->conn;
+        return $results;
     }
     
     /**

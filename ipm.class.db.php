@@ -331,6 +331,22 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
 //	public function rowcount($exid = false) { return $this->engine->rowcount($exid); } //RETURNS NUMBER OF ROWS RETURNED FROM DATABASE CALL FROM LOCAL ENGINE RESULT SET
         
     /**
+     * Opens/creates a connection to the database
+     * <p>Note: Not permitted on table engine instances</p>
+     * @param String $user User name
+     * @param String $pass Password
+     * @param String $host Server host name/IP
+     * @param String $database (Optional) Database
+     * @return Boolean True is connection created
+     */
+    public function open($user,$pass,$host,$database = "") {
+        $results = parent::open($user,$pass,$host,$database);
+        $this->errno = $this->plugin->errno;
+        $this->error = $this->plugin->error;
+        return $results;
+    }
+    
+    /**
      * Submits an SQL statement to the database
      * <p>Note: Not permitted on table engine instances</p>
      * @param String $query Query to execute

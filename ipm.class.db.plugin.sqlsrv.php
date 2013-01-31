@@ -55,15 +55,32 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
      */
     public function getDefaults($option = "") { return ($option == "") ? $this->defaults:$this->defaults->$option; }
 
+    private function setError($code,$message = "") {
+        if (!is_array($code)) {
+            $this->errno = $code;
+            $this->error = $message;
+        } else {
+            $this->errno = 1;
+            $this->error = Array();
+            for($x = 0; $x < count($code); $x++)
+            $this->error[] = $code[$x]["message"];
+        }
+    }
+    
     /**
      * Opens/creates a connection to the database
      * @param String $user User name
      * @param String $pass Password
      * @param String $host Server host name/IP
+     * @param String $database Database
      * @return Boolean True is connection created
      */
-    public function open($user,$pass,$host,$database) {
+    public function open($user,$pass,$host,$database = "") {
         if ($this->extensionLoaded === false) return false;
+        if (!$database) {
+            $this->setError(1,"Database is required on Open()");
+            return false;
+        }
         
         $this->errno = 0;
         $this->error = "";
@@ -73,8 +90,7 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
             "Database"=> $database
         ));
         if (!$this->conn) {
-            $this->errno = mysql_errno();
-            $this->error = mysql_error();
+            $this->setError(sqlsrv_errors(SQLSRV_ERR_ERRORS));
             return false;
         }
         $this->server = $host;
@@ -138,6 +154,10 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
      */ 
     public function query($query) {
         if ($this->extensionLoaded === false) return false;
+        if ($this->conn === false) {
+            $this->error = "Database connection is not open";
+            return false;
+        }
         
         $this->num_rows = 0;
         $this->insert_id = 0;

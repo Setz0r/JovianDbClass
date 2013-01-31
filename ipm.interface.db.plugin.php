@@ -35,9 +35,10 @@ interface iIPM_db_plugin {
      * @param String $user User name
      * @param String $pass Password
      * @param String $host Server host name/IP
+     * @param String $database (Optional) Database
      * @return Boolean True is connection created
      */
-    public function open($user,$pass,$host);
+    public function open($user,$pass,$host,$database = "");
 
     /**
      * Sets the current database as active
