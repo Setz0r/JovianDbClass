@@ -105,6 +105,36 @@ interface iIPM_db_plugin {
     public function real_escape_string($var);
 
     /**
+     * Simulates the <i>show</i> command in MySQL.  Paramters expect also expect 
+     * a syntax similar to the MySQL syntax.  For example:
+     * <pre class="brush: js;" style="background-color:white">
+     *      $reslults = $db->show("tables");
+     *      ...
+     *      $reslults = $db->show("columns","users_tables");
+     *      ...
+     *      $reslults = $db->show("create","table users_table");
+     * </pre>
+     * @param string $command Show command to perform (tables, columns, create)
+     * @param string $object (Optoinal) Depending on the command, extra data for the query
+     * @return array An array of the result set formatted as a MySQL result array
+     */
+    public function show($command,$object = "");
+    
+    /**
+     * Simulates the <i>describe</i> command in MySQL.
+     * @param type $table Table name to describe
+     * @return array An array of the result set formatted as a MySQL result array
+     */
+    public function describe($table);
+    
+    /**
+     * Alias of <i>describe()</i> as is the MySQL command.
+     * @param type $table Table name to describe
+     * @return array An array of the result set formatted as a MySQL result array
+     */
+    public function explain($table);
+    
+    /**
      * Insert a record into the database by generating a safe query using provided
      * parameter array
      * @param array $params A configuration array containing the following 

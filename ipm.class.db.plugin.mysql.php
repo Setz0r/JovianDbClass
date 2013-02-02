@@ -257,6 +257,58 @@ class IPM_db_plugin_mysql extends aIPM_db_plugin implements iIPM_db_plugin {
     }
 
     /**
+     * Simulates the <i>show</i> command in MySQL.  Paramters also expect a 
+     * syntax similar to the MySQL syntax.  For example:
+     * <pre class="brush: js;" style="background-color:white">
+     *      $reslults = $db->show("tables");
+     *      ...
+     *      $reslults = $db->show("columns","users_tables");
+     *      ...
+     *      $reslults = $db->show("create","table users_table");
+     * </pre>
+     * @param string $command Show command to perform (tables, columns, create)
+     * @param string $object (Optoinal) Depending on the command, extra data for the query
+     * @return array An array of the result set formatted as a MySQL result array
+     */
+    public function show($command,$object = "") {
+        switch ($command) {
+            case "tables":
+                $showQuery = "SHOW TABLES";
+                return $this->query($showQuery);
+                break;
+            case "columns":
+                $showQuery = "SHOW columns FROM ".$object;
+                return $this->query($showQuery);
+                break;
+            case "create":
+                $subobj = explode(" ",$object);
+                switch ($subojb[0]) {
+                    case "table":
+                        $sQueryShowCreate = "show create table `".$subojb[1]."`"; //GET TABLE CREATE SQL QUERY
+                        $results = $this->query($sQueryShowCreate); //EXECUTE DATABASE DATA CALL
+                        return $results;
+                        break;
+                }
+                break;
+        }
+        return false;
+    }
+    
+    /**
+     * Simulates the <i>describe</i> command in MySQL.
+     * @param type $table Table name to describe
+     * @return array An array of the result set formatted as a MySQL result array
+     */
+    public function describe($table) { return $this->show("columns",$table); }
+    
+    /**
+     * Alias of <i>describe()</i> as is the MySQL command.
+     * @param type $table Table name to describe
+     * @return array An array of the result set formatted as a MySQL result array
+     */
+    public function explain($table) { return $this->describe($table); }
+    
+    /**
      * Compiles an insert query for safe execution
      * @param string $tablename The table to perform the query on
      * @param array $vars An array of table fields/value pairs

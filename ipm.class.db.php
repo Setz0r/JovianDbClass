@@ -185,15 +185,14 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
      */
     public function createTableStructureCache() {
         $dbTables = Array();
-        $sQueryShowTables = "show tables"; //GET A LIST OF DATABASE TABLES
-        $results = $this->query($sQueryShowTables); //EXECUTE DATABASE DATA CALL
+        $results = $this->plugin->show("tables");
+        echo '$results: '.print_r($results,true)."<br>\r\n";
         for ($x = 0; $x < count($results); $x++) //LOOP THROUGH RESULT ARRAY TO SET TABLE STRUCTURE ARRAY
         foreach ($results[$x] as $db => $table) $dbTables[$table] = Array("fields"=>Array(),"query"=>""); //SET TABLE STRUCTURE ARRAY WITH EMPTY ARRAYS
         unset($results); //FREE RESULTS VARIABLE FOR PROCESSING DIFFERENT RESULTS
 
         foreach ($dbTables as $tablename => $v) { //LOOP THROUGH TABLE STRUCTURE ARRAY TO FILL IN DATA
-            $sQueryExplain = "explain `".$tablename."`"; //GET TABLE STRUCTURE
-            $results = $this->query($sQueryExplain); //EXECUTE DATABASE DATA CALL
+            $results = $this->plugin->explain($tablename);
             for ($x = 0; $x < count($results); $x++) { //LOOP THROUGH FIELDS TO FILL TABLE STRUCTURE ARRAY
                 $temp = explode("(",$results[$x]["Type"]); //SEPERATE FIELD TYPE FROM LENGTH
                 $dbTables[$tablename]["fields"][] = Array( //FILL FIELDS DATA IN STRUCTURE ARRAY
@@ -201,13 +200,12 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
                     "key" => $results[$x]["Key"], //TYPE OF KEY FOR FIELD (PRIMARY/SECONDARY)
                     "type" => $temp[0], //FIELD TYPE (INT,VARCHAR,ECT)
                     "length" => substr($temp[1],0,strlen($temp[1])-1), //LENGTH OF FIELD DATA
-                    "null" => (strtoupper($results[$x]["null"]) == "YES")? true:false, //NULL ALLOWED?
+                    "null" => (strtoupper($results[$x]["Null"]) == "YES")? true:false, //NULL ALLOWED?
                     "auto" => ($results[$x]["Extra"] == "auto_increment") ? true:false, //AUTO INCREMENT SET?
                     "extra" => $results[$x]["Extra"] //SET ANY OTHER EXTRA VALUES
                 ); //CLOSE ARRAY
             } //END FOR
-            $sQueryShowCreate = "show create table `".$tablename."`"; //GET TABLE CREATE SQL QUERY
-            $results = $this->query($sQueryShowCreate); //EXECUTE DATABASE DATA CALL
+            $results = $this->plugin->show("create","table ".$tablename);
             $dbTables[$tablename]["query"] = $results[0]["Create Table"]; //SET CREATE SQL IN STRUCTURE ARRAY
         }
         
@@ -220,7 +218,7 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
     /**
      * Loads the table structure cache into the dbTables array
      */
-    protected function loadTableStructure() {
+    public function loadTableStructure() {
         $createfile = false;
         $path = __dir__;
         if (file_exists($path."/".$this->tableStructureCacheFile)) {
@@ -343,6 +341,11 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
         $results = parent::open($user,$pass,$host,$database);
         $this->errno = $this->plugin->errno;
         $this->error = $this->plugin->error;
+        if ($results) {
+            //$this->loadDefaults(); //ONCE THE DATABASE IS SET LOAD THE DATABASE DEFAULTS
+            $this->loadTableStructure();
+            $this->loadRegistration(); //ONCE THE DATABASE IS SET LOAD THE TABLE REGISTRATION
+        }
         return $results;
     }
     
@@ -398,9 +401,6 @@ class IPM_db extends IPM_db_engine { //MAIN DATABASE CLASS
      */
     public function setdb($db) {
         if ($this->plugin->setdb($db)) {
-            //$this->loadDefaults(); //ONCE THE DATABASE IS SET LOAD THE DATABASE DEFAULTS
-            $this->loadTableStructure();
-            $this->loadRegistration(); //ONCE THE DATABASE IS SET LOAD THE TABLE REGISTRATION
             return true;
         }
         return false;

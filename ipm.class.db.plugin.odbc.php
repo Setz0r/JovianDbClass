@@ -11,13 +11,11 @@
  * @package   IPM\Core\System\Database
  */
 /**
- * IPM Microsoft's SQL Server Database Plugin
- * 
- * <b>Note: This is sqlsrv extension, not PHP's mssql extension
+ * IPM ODBC Database Plugin
  * 
  * @package   IPM\Core\System\Database
  */
-class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
+class IPM_db_plugin_odbc extends aIPM_db_plugin implements iIPM_db_plugin {
 
     /**
      * Result of the last SQL select state as an array
@@ -34,7 +32,7 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
      * @constructor
      */
     public function __construct($conn = false) {
-        if (function_exists("sqlsrv_connect")) $this->extensionLoaded = true;
+        if (function_exists("odbc_connect")) $this->extensionLoaded = true;
         parent::__construct($conn);
     }
 
@@ -55,47 +53,30 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
      */
     public function getDefaults($option = "") { return ($option == "") ? $this->defaults:$this->defaults->$option; }
 
-    private function setError($code,$message = "") {
-        if (!is_array($code)) {
-            $this->errno = $code;
-            $this->error = $message;
-        } else {
-            $this->errno = 1;
-            $this->error = Array();
-            for($x = 0; $x < count($code); $x++)
-            $this->error[] = $code[$x]["message"];
-        }
-    }
-    
     /**
      * Opens/creates a connection to the database
      * @param String $user User name
      * @param String $pass Password
-     * @param String $host Server host name/IP
-     * @param String $database Database
+     * @param String $host Server host name/IP or DSN
+     * @param String $database (Optional) Database
      * @return Boolean True is connection created
      */
     public function open($user,$pass,$host,$database = "") {
         if ($this->extensionLoaded === false) return false;
-        if (!$database) {
-            $this->setError(1,"Database is required on Open()");
-            return false;
-        }
         
         $this->errno = 0;
         $this->error = "";
-        $this->conn = sqlsrv_connect($host,Array(
-            "UID" => $user,
-            "PWD" => $pass,
-            "Database"=> $database
-        ));
+        $this->conn = odbc_connect($host,$user,$pass,true);
         if (!$this->conn) {
-            $this->setError(sqlsrv_errors(SQLSRV_ERR_ERRORS));
+            $this->errno = odbc_error();
+            $this->error = odbc_errormsg();
             return false;
         }
         $this->server = $host;
         $this->username = $user;
         $this->password = $pass;
+        if ($database !== "") $this->setdb($database);
+        
         return true;
     }
 
@@ -108,6 +89,8 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
         if ($this->extensionLoaded === false) return false;
         if (!$this->conn) return false;
         
+        $this->dbsel = odbc_do($this->conn,"use ".$db);
+        if (!$this->dbsel) return false;
         $this->dbsel = true;
         $this->database = $db;
         return true;
@@ -118,10 +101,9 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
      * @param String $dbvar Session variable to set
      * @param String $value Value to assign to the session variable
      * @return Boolean True on success
-     * @deprecated Not used in MSSQL
      */
     public function setvar($variable,$value) {
-        return true;
+        return false;
     }
         
     /**
@@ -139,8 +121,8 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
     public function close() {
         if ($this->extensionLoaded === false) return false;
         
-        sqlsrv_free_stmt($this->sqlresult);
-        sqlsrv_close($this->conn);
+        odbc_free_result($this->sqlresult);
+        odbc_close($this->conn);
         $this->num_rows = 0;
         $this->dbsel = false;
         $this->database = "";
@@ -154,10 +136,6 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
      */ 
     public function query($query) {
         if ($this->extensionLoaded === false) return false;
-        if ($this->conn === false) {
-            $this->error = "Database connection is not open";
-            return false;
-        }
         
         $this->num_rows = 0;
         $this->insert_id = 0;
@@ -166,19 +144,16 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
         $this->lastQuery = $query;
         $time_start = microtime(true);
         
-        $this->sqlresult = sqlsrv_query($this->conn,$query,null,Array("Scrollable"=>SQLSRV_CURSOR_KEYSET));
+        $this->sqlresult = odbc_exec($this->conn,$query);
         $queryTime = number_format(microtime(true) - $time_start,4);
         
-        $errors = sqlsrv_errors(SQLSRV_ERR_ERRORS);
-        if (!$errors) { $this->errno = 0; $this->error = ""; }
-        else {
-            $this->errno = $errors[count($errors)-1]["code"];
-            $this->error = $errors[count($errors)-1]["message"];
-        }
+        $this->errno = odbc_error($this->conn);
+        $this->error = odbc_errormsg($this->conn);
         
         if (!$this->errno) {
-            $this->affected_rows = @sqlsrv_rows_affected($this->sqlresult);
-            $this->num_rows = @sqlsrv_num_rows($this->sqlresult);
+            $this->affected_rows = @odbc_num_rows($this->conn);
+            $this->insert_id = 0;
+            $this->num_rows = @odbc_num_rows($this->sqlresult);
             $results = $this->returnArray();
             
             $this->lastQuery = (Object)Array(
@@ -226,28 +201,29 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
      * @todo Move the commented <i>result</i> function the mysqli plugin
      */
     public function result($row,$field = 0) {
-        if ($this->sqlresult) {
-            $datarow = sqlsrv_fetch_array($this->sqlresult,SQLSRV_FETCH_BOTH,SQLSRV_SCROLL_ABSOLUTE,$row);
-            return $datarow[$field];
-        }
+        if ($this->sqlarray) return $this->sqlarray[$row][$field];
         return false;
     }
+//    This function version is for the mysqli extension
+//    public function result($row,$field = 0) {
+//        if ($this->sqlresult) {
+//            $this->reset($row);
+//            $datarow = mysql_fetch_array($this->sqlresult); 
+//            return $datarow[$field];
+//        }
+//        return false;
+//    }
 
     /**
      * Resets the pointer in the MySQL result set
      * @param Integer $pointer (Optional) Position in the result set to reset to, defaults to 0
      * @return mixed True on success, MySQL error number on failure
-     * @fixme This method might not work.  Microsoft didn't see fit to include a 
-     * function similar to mysql_data_seek, so all i can hope for is fetching the 
-     * first result in the set and then trying to fetch the prior row in the hopes 
-     * that when fetching the next row it'll actually fetch the first row.
      */
     public function reset($pointer = 0) {
         if (!$this->errno) {
             reset($this->sqlarray);
-            sqlsrv_fetch_array($this->results("resource"),SQLSRV_FETCH_ASSOC,SQLSRV_SCROLL_FIRST);
-            $result = sqlsrv_fetch_array($this->results("resource"),SQLSRV_FETCH_ASSOC,SQLSRV_SCROLL_PRIOR);
-            if ($result) return true;
+            odbc_fetch_row($this->sqlresult,$pointer);
+            if (odbc_errno($this->conn)) return odbc_errormsg($this->conn);
         }
         return false;
     }
@@ -259,11 +235,13 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
     private function returnArray() {
         if (!$this->errno) {
             $this->sqlarray = Array();
-            $this->reset();
-            while ($row = sqlsrv_fetch_array($this->results("resource"),SQLSRV_FETCH_ASSOC)) {
+            $this->sqlarray[] = odbc_fetch_array($this->results("resource"),0);
+            while ($row = odbc_fetch_array($this->results("resource"))) {
                 $this->sqlarray[] = $row;
             }
             $this->reset();
+            $this->num_rows = count($this->sqlarray);
+            $this->lastQuery->count = $this->num_rows;
             return $this->sqlarray;
         }
         return false;
@@ -281,105 +259,32 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
     }
 
     /**
-     * Converts MSSQL field types to MySQL field types for create queries
-     * @param string $type The MSSQL field type
-     * @param int $length The length of the field
-     * @return string The MySQL field type
-     */
-    public function myFieldType($type, $length = 1) {
-        if ($length == "" || $length == 0) $length = 1;
-        switch ($type) {
-            case '1': return "char(".$length.") collate latin1_general_ci"; break;
-            case '2': return "decimal(".$length.")"; break;
-            case '3': return "decimal(".$length.")"; break;
-            case '4': return "int(".$length.")"; break;
-            case '5': return "smallint(".$length.")"; break;
-            case '6': return "float(".$length.")"; break;
-            case '7': return "double(".$length.")"; break;
-            case '91': return "date"; break;
-            case '93': return "datetime"; break;
-            case '-5': return "bigint(".$length.")"; break;
-            case '-6': return "tinyint(".$length.")"; break;
-            case '-1': return "text"; break;
-            case '-2': return "timestamp"; break;
-            case '-7': return "char(1)"; break;
-            case '12': return "varchar(".$length.") collate latin1_general_ci"; break;
-            default: return "varchar(".$length.") collate latin1_general_ci"; break;
-        }
-    }
-    
-    /**
-     * Simulates the <i>show</i> command in MySQL.  Paramters expect also expect 
-     * a syntax similar to the MySQL syntax.  For example:
-     * <pre class="brush: js;" style="background-color:white">
-     *      $reslults = $db->show("tables");
-     *      ...
-     *      $reslults = $db->show("columns","users_tables");
-     * </pre>
-     * @param string $command Show command to perform (tables, columns)
+     * This method is does nothing for ODBC connections because it is database 
+     * server specific and there's no way to tell what is being connected to 
+     * when connecting through an ODBC connection.
+     * @param string $command Show command to perform (tables, columns, create)
      * @param string $object (Optoinal) Depending on the command, extra data for the query
-     * @return array An array of the result set formatted as a MySQL result array
+     * @return bool False
      */
-    public function show($command,$object = "") {
-        switch ($command) {
-            case "tables":
-                $showQuery = "SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
-                $results = $this->query($showQuery);
-                for ($x = 0; $x < count($results); $x++) $tables[$x]["Tables_in_".$results[$x]["TABLE_CATALOG"]] = $results[$x]["TABLE_NAME"];
-                return $tables;
-                break;
-            case "columns":
-                $showQuery = "SELECT * FROM information_schema.columns WHERE table_name = '".$object."' ORDER BY ordinal_position";
-                $results = $this->query($showQuery);
-                for ($x = 0; $x < count($results); $x++) {
-                    $tables[$x] = Array( 
-                        "Field" => $results[$x]["COLUMN_NAME"],
-                        "Type" => $results[$x]["DATA_TYPE"]."(".((strlen($results[$x]["CHARACTER_MAXIMUM_LENGTH"]))?$results[$x]["CHARACTER_MAXIMUM_LENGTH"]:$results[$x]["NUMERIC_PRECISION"]).")",
-                        "Null" => $results[$x]["IS_NULLABLE"],
-                        "Key" => "",
-                        "Default" => $results[$x]["COLUMN_DEFAULT"],
-                        "Extra" => ""
-                    );
-                }
-                return $tables;
-                break;
-        }
-        return false;
-    }
-//    COLUMN_NAME,
-//    ORDINAL_POSITION,
-//    COLUMN_DEFAULT,
-//    IS_NULLABLE,
-//    DATA_TYPE
-//    CHARACTER_MAXIMUM
-//    CHARACTER_OCTET_LENGTH
-//    NUMERIC_PRECISION
-//    NUMERIC_PRECISION_RADIX
-//    NUMERIC_SCALE
-//    DATETIME_PRECISION
-//    CHARACTER_SET_CATALOG
-//    CHARACTER_SET_SCHEMA
-//    CHARAVTER_SET_NAME
-//    COLLATION_CATALOG
-//    COLLATION_SCHEMA
-//    COLLATION_NAME
-//    DOMAIN_CATALOG
-//    DOMAIN_SCHEMA
-//    DOMAIN_NAME
+    public function show($command,$object = "") { return false; }
     
     /**
-     * Simulates the <i>describe</i> command in MySQL.
+     * This method is does nothing for ODBC connections because it is database 
+     * server specific and there's no way to tell what is being connected to 
+     * when connecting through an ODBC connection.
      * @param type $table Table name to describe
-     * @return array An array of the result set formatted as a MySQL result array
+     * @return bool False
      */
-    public function describe($table) { return $this->show("columns",$table); }
+    public function describe($table) { return false; }
     
     /**
-     * Alias of <i>describe()</i> as is the MySQL command.
+     * This method is does nothing for ODBC connections because it is database 
+     * server specific and there's no way to tell what is being connected to 
+     * when connecting through an ODBC connection.
      * @param type $table Table name to describe
-     * @return array An array of the result set formatted as a MySQL result array
+     * @return bool False
      */
-    public function explain($table) { return $this->describe($table); }
+    public function explain($table) { return false; }
     
     /**
      * Compiles an insert query for safe execution
@@ -390,13 +295,13 @@ class IPM_db_plugin_sqlsrv extends aIPM_db_plugin implements iIPM_db_plugin {
     private function createInsert($tablename,$vars) {
         $fields = array();
         $query = "INSERT INTO $tablename (";
-        $eQueryTableMetadata = "exec sp_columns ".$tablename;
+        $eQueryTableMetadata = "explain ".$tablename;
         $this->query($eQueryTableMetadata); //EXECUTE QUERY
         while($row = mysql_fetch_array($this->results("resource"))) { //LOOP THROUGH RESULT SET AND CREATE FIELDS ARRAY
             $fields[] = Array(
-                "name" => $row["COLUMN_NAME"],
+                "name" => $row["Field"],
                 "key" => $row["Key"],
-                "type" => $row["TYPE_NAME"],
+                "type" => $row["Type"],
                 "auto" => ($row["Extra"] == "auto_increment") ? true:false
             );
         }

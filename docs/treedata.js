@@ -82,9 +82,31 @@
                         '},'+
                     
                         '{'+
+                            '"href":"files/ipm.class.db.plugin.mssql.html",'+
+                            '"text":"IPM_db_plugin_mssql",'+
+                            '"id":"IPM_db_plugin_mssql",'+
+                            '"filename":"",'+
+                            '"isClass":true,'+
+                            '"iconCls":"icon-cls",'+
+                            '"cls":"cls",'+
+                            '"leaf":true'+
+                        '},'+
+                    
+                        '{'+
                             '"href":"files/ipm.class.db.plugin.mysql.html",'+
                             '"text":"IPM_db_plugin_mysql",'+
                             '"id":"IPM_db_plugin_mysql",'+
+                            '"filename":"",'+
+                            '"isClass":true,'+
+                            '"iconCls":"icon-cls",'+
+                            '"cls":"cls",'+
+                            '"leaf":true'+
+                        '},'+
+                    
+                        '{'+
+                            '"href":"files/ipm.class.db.plugin.odbc.html",'+
+                            '"text":"IPM_db_plugin_odbc",'+
+                            '"id":"IPM_db_plugin_odbc",'+
                             '"filename":"",'+
                             '"isClass":true,'+
                             '"iconCls":"icon-cls",'+

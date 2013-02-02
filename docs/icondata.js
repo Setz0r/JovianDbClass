@@ -4,7 +4,11 @@
           
                 '"IPM_db_engine":"icon-cls",'+
           
+                '"IPM_db_plugin_mssql":"icon-cls",'+
+          
                 '"IPM_db_plugin_mysql":"icon-cls",'+
+          
+                '"IPM_db_plugin_odbc":"icon-cls",'+
           
                 '"IPM_db_plugin_sqlsrv":"icon-cls",'+
           
